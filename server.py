@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import uvicorn
 import sys
 import os
-import asyncio
+from typing import Optional
 
 # Add project directory to path
 sys.path.append(os.path.dirname(__file__))
@@ -16,10 +16,19 @@ from app.config import config
 from app.utils.ollama_check import check_ollama_models, test_ollama_connection
 from app.llm import LLM
 
+# Import for ngrok
+try:
+    from pyngrok import ngrok
+    NGROK_AVAILABLE = True
+except ImportError:
+    NGROK_AVAILABLE = False
+    logger.warning("pyngrok not installed. Ngrok functionality will be disabled.")
+
 app = FastAPI(title="SMU LLM API Server")
 
 # Initialize the agent
 agent = None
+public_url = None
 
 class RequestData(BaseModel):
     query: str
@@ -28,7 +37,7 @@ class RequestData(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """Runs when the server starts up."""
-    global agent
+    global agent, public_url
     
     # Check Ollama connection if using Ollama
     if config.llm["default"].api_type == "ollama":
@@ -57,6 +66,13 @@ async def startup_event():
 @app.get("/")
 async def root():
     """API root endpoint."""
+    global public_url
+    if public_url:
+        return {
+            "message": "SMU LLM Server is running.",
+            "docs": f"{public_url}/docs",
+            "public_url": public_url
+        }
     return {"message": "SMU LLM Server is running. Use /docs to see the API documentation."}
 
 
@@ -121,14 +137,55 @@ async def process_request(data: RequestData):
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    global agent
+    global agent, public_url
     return {
         "status": "healthy",
-        "agent_initialized": agent is not None
+        "agent_initialized": agent is not None,
+        "public_url": public_url
     }
 
 
+def start_ngrok(port: int, auth_token: Optional[str] = None):
+    """Start ngrok tunnel to expose the local server."""
+    global public_url
+    
+    if not NGROK_AVAILABLE:
+        logger.error("Cannot start ngrok: pyngrok is not installed. Run 'pip install pyngrok'")
+        return
+    
+    # Set auth token if provided
+    if auth_token:
+        ngrok.set_auth_token(auth_token)
+    
+    try:
+        # Open an HTTP tunnel to the specified port
+        public_url = ngrok.connect(port).public_url
+        logger.info(f"🌐 Ngrok tunnel started at: {public_url}")
+        logger.info(f"🌐 API documentation available at: {public_url}/docs")
+        return public_url
+    except Exception as e:
+        logger.error(f"Error starting ngrok tunnel: {e}")
+        return None
+
+
+def run_server(host: str = "0.0.0.0", port: int = 8000, 
+               use_ngrok: bool = False, ngrok_token: Optional[str] = None):
+    """Start the server with optional ngrok tunnel."""
+    if use_ngrok and NGROK_AVAILABLE:
+        start_ngrok(port, ngrok_token)
+    
+    uvicorn.run(app, host=host, port=port)
+
+
 if __name__ == "__main__":
-    # Run the server on 0.0.0.0 to make it accessible on the network
-    # on port 8000 (or any port you prefer)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Run the SMU LLM Server")
+    parser.add_argument("--port", type=int, default=8000, help="Port to run the server on")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind the server to")
+    parser.add_argument("--ngrok", action="store_true", help="Use ngrok to expose the server to the internet")
+    parser.add_argument("--token", type=str, help="Ngrok auth token (if required)")
+    
+    args = parser.parse_args()
+    
+    run_server(args.host, args.port, args.ngrok, args.token)
