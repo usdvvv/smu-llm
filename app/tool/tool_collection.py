@@ -25,7 +25,8 @@ class ToolCollection:
         if not tool:
             return ToolFailure(error=f"Tool {name} is invalid")
         try:
-            result = await tool(**tool_input)
+            # Pass tool_input as a single parameter without unpacking
+            result = await tool.execute(tool_input or {})
             return result
         except ToolError as e:
             return ToolFailure(error=e.message)
@@ -35,7 +36,7 @@ class ToolCollection:
         results = []
         for tool in self.tools:
             try:
-                result = await tool()
+                result = await tool.execute({})
                 results.append(result)
             except ToolError as e:
                 results.append(ToolFailure(error=e.message))

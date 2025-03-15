@@ -1,11 +1,13 @@
 import asyncio
 import os
+import time
 from pathlib import Path
 
 from app.agent.manus import Manus
 from app.logger import logger
 from app.config import config
 from app.utils.ollama_check import check_ollama_models, test_ollama_connection
+from app.swarm import SwarmCoordinator  # Import SwarmCoordinator from the new module
 
 
 async def main():
@@ -28,33 +30,57 @@ async def main():
         
         logger.info(f"Successfully connected to Ollama using {model_name}")
     
+    # Initialize both traditional agent and swarm coordinator
     agent = Manus()
+    swarm = SwarmCoordinator()
+    
     try:
         prompt = input("Enter your prompt: ")
         if not prompt.strip():
             logger.warning("Empty prompt provided.")
             return
 
-        logger.info("Processing your request...")
-        result = await agent.run(prompt)
+        # Ask if they want to use the swarm approach
+        use_swarm = input("Use faster swarm processing? (y/n, default=n): ").lower().startswith('y')
         
-        # Extract and display the final answer if it's in the expected format
-        if result and "===== FINAL ANSWER =====" in result:
-            try:
-                final_answer = result.split("===== FINAL ANSWER =====")[1].split("=======================")[0].strip()
-                print("\n" + "="*60)
-                print(" "*20 + "FINAL ANSWER")
-                print("="*60)
-                print(final_answer)
-                print("="*60 + "\n")
-            except Exception as e:
-                # In case the format doesn't match, just show the raw result
-                logger.error(f"Error extracting final answer: {e}")
-                print("\nResult:", result)
-        else:
-            print("\nResult:", result)
+        logger.info("Processing your request...")
+        start_time = time.time()
+        
+        if use_swarm:
+            # Use swarm approach
+            logger.info("Using swarm processing...")
+            result = await swarm.process_query(prompt)
             
-        logger.info("Request processing completed.")
+            # Format the result
+            final_answer = result
+            elapsed_time = time.time() - start_time
+            logger.info(f"Swarm processing completed in {elapsed_time:.2f} seconds")
+        else:
+            # Use traditional approach
+            logger.info("Using traditional processing...")
+            result = await agent.run(prompt)
+            
+            # Extract and display the final answer if it's in the expected format
+            if result and "===== FINAL ANSWER =====" in result:
+                try:
+                    final_answer = result.split("===== FINAL ANSWER =====")[1].split("=======================")[0].strip()
+                except Exception:
+                    final_answer = result
+            else:
+                final_answer = result
+                
+            elapsed_time = time.time() - start_time
+            logger.info(f"Traditional processing completed in {elapsed_time:.2f} seconds")
+        
+        # Display result
+        print("\n" + "="*60)
+        print(" "*20 + "FINAL ANSWER")
+        print("="*60)
+        print(final_answer)
+        print("="*60 + "\n")
+        
+        logger.info(f"Request processing completed in {elapsed_time:.2f} seconds.")
+        
     except KeyboardInterrupt:
         logger.warning("Operation interrupted.")
     except Exception as e:
