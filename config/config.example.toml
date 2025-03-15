@@ -1,0 +1,47 @@
+# Global LLM configuration for Ollama
+[llm]
+model = "mistral:latest"  # Good general purpose model (4.1GB)
+base_url = "http://localhost:11434"
+api_key = ""
+max_tokens = 4096
+temperature = 0.7
+api_type = "ollama"
+api_version = ""
+
+# Specialized configuration for coding tasks
+[llm.coder]
+model = "qwen2.5-coder:32b"  # Large specialized coding model (19GB)
+base_url = "http://localhost:11434"
+api_key = ""
+max_tokens = 4096
+temperature = 0.2  # Lower temperature for more precise code generation
+api_type = "ollama"
+api_version = ""
+
+# Alternative model options
+[llm.llama]
+model = "llama3:8b"  # Meta's newest model (4.7GB)
+base_url = "http://localhost:11434"
+api_key = ""
+max_tokens = 4096
+temperature = 0.5
+api_type = "ollama"
+api_version = ""
+
+[llm.deepseek]
+model = "deepseek-r1:latest"  # Research-focused model (4.7GB)
+base_url = "http://localhost:11434"
+api_key = ""
+max_tokens = 4096
+temperature = 0.7
+api_type = "ollama"
+api_version = ""
+
+# Browser configuration (if needed)
+[browser]
+headless = false
+disable_security = true
+
+# Search configuration (if needed)
+[search]
+engine = "Google"
